@@ -1,0 +1,59 @@
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.Socket;
+import java.net.URL;
+import java.net.URLConnection;
+
+public class ProxyThread extends Thread {
+    private final Socket clientSocket;
+
+    public ProxyThread(Socket clientSocket) {
+        this.clientSocket = clientSocket;
+    }
+
+    @Override
+    public void run() {
+        try {
+            // Read client's request
+            InputStream clientInput = clientSocket.getInputStream();
+
+            // Extract the requested URL from the client's request
+            StringBuilder request = new StringBuilder();
+            int nextChar;
+            while ((nextChar = clientInput.read()) != -1) {
+                request.append((char) nextChar);
+                if (request.toString().endsWith("\r\n\r\n"))
+                    break;
+            }
+            String requestedURL = extractRequestedURL(request.toString());
+
+            // Connect to the requested URL
+            URL url = new URL(requestedURL);
+            URLConnection urlConnection = url.openConnection();
+            InputStream urlInput = urlConnection.getInputStream();
+
+            // Forward the response from the requested URL to the client
+            OutputStream clientOutput = clientSocket.getOutputStream();
+            byte[] buffer = new byte[1024];
+            int bytesRead;
+            while ((bytesRead = urlInput.read(buffer)) != -1) {
+                clientOutput.write(buffer, 0, bytesRead);
+            }
+
+            // Close streams and sockets
+            clientOutput.close();
+            urlInput.close();
+            clientInput.close();
+            clientSocket.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private String extractRequestedURL(String request) {
+        String[] lines = request.split("\r\n");
+        String[] firstLineParts = lines[0].split(" ");
+        return firstLineParts[1];
+    }
+}
